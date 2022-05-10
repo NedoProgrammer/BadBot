@@ -7,7 +7,7 @@ namespace BadBot.Commands;
 public class Ping: ApplicationCommandModule
 {
 	private static readonly string[] TitleMessages = {"хоб хоба инфу слили", "вычислили по ip..", "информация", "бип буп"};
-	[SlashCommand("ping", "проверить, жив ли бот.")]
+	[SlashCommand("ping", "проверить, жив ли бот")]
 	public async Task ExecutePing(InteractionContext ctx)
 	{
 		var now = DateTime.Now;

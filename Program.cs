@@ -34,8 +34,10 @@ public class DefaultCommand : Command
 		FontManager.Init();
 
 		MainInterface.Show();
-		Bot.Singleton.Start();
 		
+		RequestManager.Singleton.StartProcessor();
+		Bot.Singleton.Start();
+
 		return 0;
 	}
 

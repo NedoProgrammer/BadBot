@@ -12,6 +12,10 @@
       <PackageReference Include="DSharpPlus.Interactivity" Version="4.3.0-nightly-01130" />
       <PackageReference Include="DSharpPlus.SlashCommands" Version="4.3.0-nightly-01130" />
       <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="11.1.0" />
+      <PackageReference Include="MimeTypes" Version="2.4.0">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
       <PackageReference Include="PuppeteerExtraSharp" Version="1.3.2" />
       <PackageReference Include="PuppeteerSharp" Version="7.0.0" />
