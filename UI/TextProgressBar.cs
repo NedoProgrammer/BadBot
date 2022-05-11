@@ -19,7 +19,7 @@ public class TextProgressBar
 	public override string ToString()
 	{
 		var str = "[";
-		var percentage = (Value + Min) / Max * 100;
+		var percentage = (int)((Value + Min) / (float)Max * 100);
 		for (var i = 0; i < percentage / _delta; i++)
 			str += "=";
 		for (var i = percentage / _delta; i < Length; i++)

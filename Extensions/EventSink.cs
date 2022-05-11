@@ -24,6 +24,7 @@ public class EventSink : ILogEventSink
 		File.WriteAllText("latest_log.txt", "");
 	}
 
+	private static ReaderWriterLockSlim _fileLock = new();
 	/// <summary>
 	/// Derived from <see cref="ILogEventSink"/>.
 	/// Writes to the file & console, also invokes the event. (if set)
@@ -35,7 +36,20 @@ public class EventSink : ILogEventSink
 		var formatted = $"{DateTime.Now:g}:{DateTime.Now.Millisecond} [{logEvent.Level.ToString()}] {message}";
 		#pragma warning disable Spectre1000
 		Console.WriteLine(formatted);
-		File.AppendAllText("latest_log.txt", formatted + "\n");
+		//File.AppendAllText("latest_log.txt", formatted + "\n");
+		
+		_fileLock.EnterWriteLock();
+		try
+		{
+			using var sw = File.AppendText("latest_log.txt");
+			sw.Write(formatted + "\n");
+			sw.Close();
+		}
+		finally
+		{
+			_fileLock.ExitWriteLock();
+		}
+
 		#pragma warning restore Spectre1000
 		Emitted?.Invoke();
 	}

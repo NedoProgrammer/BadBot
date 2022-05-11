@@ -1,16 +1,13 @@
 ﻿using BadBot.Commands;
+using BadBot.Extensions;
 using BadBot.Requests;
 using DSharpPlus.SlashCommands;
 namespace BadBot.Commands.Modify.Video;
 public class Reverse: RequestCommandModule
 {
-	public Reverse()
+	public override async Task Process()
 	{
-	}
-
-	public override Task Process(Request request)
-	{
-		return Task.CompletedTask;
+		await this.ReverseSource();
 	}
 
 	[SlashCommand("reverse", "развернуть видео")]

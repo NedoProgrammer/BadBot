@@ -21,6 +21,7 @@ public class ResourceChecker
 		CheckResource("Resources", true, false, str => Directory.CreateDirectory(str));
 		CheckResource("Resources/Crashed.jpg", false, true);
 		CheckResource("Resources/MainFont.ttf", false, true);
+		CheckResource("Requests", true, false, str => Directory.CreateDirectory(str));
 		
 		AnsiConsole.MarkupLine("\n[yellow]Checking commands..[/]");
 		CheckCommand("ffmpeg", "", 1, 0);

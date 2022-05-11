@@ -64,8 +64,16 @@ User: {_interactionContext.User.Id} ({_interactionContext.User.Username})
 Channel: {_interactionContext.Channel.Id} (#{_interactionContext.Channel.Name})
 Guild: {(_interactionContext.Channel.IsPrivate ? "no": $"{_interactionContext.Guild.Id} ({_interactionContext.Guild.Name})")}";
 		_contextNode.AddNode(new Panel(contextText));
-		
-		_ctx?.Refresh();
+
+		try
+		{
+			_ctx?.Refresh();
+		}
+		catch(Exception e)
+		{
+			AnsiConsole.WriteLine("Failed to update context");
+			AnsiConsole.WriteException(e);
+		}
 	}
 
 	private static InteractionContext? _interactionContext;

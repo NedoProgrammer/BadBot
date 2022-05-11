@@ -1,4 +1,5 @@
-﻿using BadBot.Helpers;
+﻿using System.Text.RegularExpressions;
+using BadBot.Helpers;
 using BadBot.Requests;
 using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
@@ -8,12 +9,14 @@ namespace BadBot.Commands;
 
 public abstract class RequestCommandModule: ApplicationCommandModule
 {
-	public event Action<string>? MessageEmitted;
-	public void Emit(string message) => MessageEmitted?.Invoke(message);
+	public event Action<string> MessageEmitted;
+	public event Action<int> ProgressChanged;
+	public void Emit(string message, string end = "\n") => MessageEmitted(message + end);
+	public void SetProgress(int percentage) => ProgressChanged(percentage);
 
 	public Request Request { get; private set; }
 	private RequestOptions _options;
-	public abstract Task Process(Request request);
+	public abstract Task Process();
 	public abstract Task Execute(InteractionContext ctx, string url = "");
 	public abstract bool Video { get; protected set; }
 
@@ -39,15 +42,27 @@ public abstract class RequestCommandModule: ApplicationCommandModule
 			var message = await ctx.EditResponseAsync(new DiscordWebhookBuilder()
 				.WithContent("пытаюсь получить предыдущее сообщение.."));
 			var messages = await ctx.Channel.GetMessagesBeforeAsync(message.Id, 1);
-			if (messages.All(x => x.Attachments.Count == 0))
+
+			var urlRegex =
+				"https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{2,256}\\.[a-z]{2,4}\\b([-a-zA-Z0-9@:%_\\+.~#?&//=]*)";
+
+			if (messages.All(x => x.Attachments.Count == 0 && !Regex.IsMatch(x.Content, urlRegex)))
 			{
 				await ctx.EditResponseAsync(new DiscordWebhookBuilder()
 					.WithContent("не могу я из прошлого сообщения получить видео/картинку! куда дели??"));
 				return;
 			}
 
-			url = messages[0].Attachments[0].Url;
-			mimeType = messages[0].Attachments[0].MediaType;
+			if (messages[0].Attachments.Count != 0)
+			{
+				url = messages[0].Attachments[0].Url;
+				mimeType = messages[0].Attachments[0].MediaType;
+			}
+			else
+			{
+				url = Regex.Match(messages[0].Content, urlRegex).Value;
+				mimeType = UrlHelper.GetMimeType(url);
+			}
 		}
 		else
 			mimeType = UrlHelper.GetMimeType(url);
@@ -93,7 +108,7 @@ public abstract class RequestCommandModule: ApplicationCommandModule
 				.WithColor(DiscordColor.Gold)
 				.AddField("ID", $"`{Request.Id}`", true)
 				.AddField("Тип", $"`{Request.Type}` ({Request.RequestTypes.First(x => x.Value == Request.Type).Key.Name})", true)
-				.AddField("Статус", Request.StatusMessage.JumpLink.ToString(), false)
+				.AddField("Статус", Request.StatusMessage.JumpLink.ToString())
 				.Build()));
 	}
 }

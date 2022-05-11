@@ -2,7 +2,7 @@
 
 public class UrlHelper
 {
-	public static string GetExtension(string url) => Path.GetExtension(url).Split("?")[0].Replace(".", "").Trim();
+	public static string GetExtension(string url) => Path.GetExtension(url).Split("?")[0].Trim();
 	public static string GetMimeType(string url) => MimeTypes.GetMimeType(GetExtension(url));
 	
 	public static bool IsYoutube(string url)
