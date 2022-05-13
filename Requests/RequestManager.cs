@@ -1,4 +1,6 @@
-﻿using BadBot.Commands;
+﻿using System.Runtime.CompilerServices;
+using BadBot.Commands;
+using BadBot.Extensions;
 using BadBot.Helpers;
 using BadBot.UI;
 using DSharpPlus.Entities;
@@ -8,6 +10,23 @@ namespace BadBot.Requests;
 
 public class RequestManager
 {
+	private class Stage
+	{
+		public Action<string> LogAction;
+		public Action<int> ProgressAction;
+
+		public Stage()
+		{
+			LogAction = str => Log += str;
+			ProgressAction = i => ProgressBar.Value = i;
+		}
+
+		public string Log { get; private set; }
+		public TextProgressBar ProgressBar = new() {Value = 0};
+
+		public override string ToString() => $"```\n{Log}\n{ProgressBar}\n```";
+	}
+
 	public static RequestManager Singleton = new();
 
 	private RequestManager()
@@ -15,14 +34,12 @@ public class RequestManager
 
 	private Queue<RequestCommandModule> _handlers = new();
 	public void AddRequest(RequestCommandModule module) => _handlers.Enqueue(module);
-
-	private TextProgressBar _downloadProgress;
-	private TextProgressBar _processingProgress;
-	private TextProgressBar _sendingProgress;
-	private string _downloadLog = "";
-	private string _processingLog = "";
-	private string _sendingLog = "";
+	
+	private Stage _downloading = new();
+	private Stage _processing = new();
+	private Stage _sending = new();
 	private RequestCommandModule _handler;
+	private Stage? _current;
 	public void StartProcessor()
 	{
 		Task.Run(async () =>
@@ -31,16 +48,18 @@ public class RequestManager
 			{
 				while (_handlers.Count == 0) await Task.Delay(1000);
 				_handler = _handlers.Dequeue();
-				_downloadProgress = new TextProgressBar {Value = 0};
-				_processingProgress = new TextProgressBar {Value = 0};
-				_sendingProgress = new TextProgressBar {Value = 0};
+				var request = _handler;
 
-				_handler.ProgressChanged += p => _processingProgress.Value = p;
-				_handler.MessageEmitted += LogToDownload;
+				_downloading = new();
+				_processing = new();
+				_sending = new();
+				_current = null;
+
+				Switch(_downloading);
 
 				Emit("Creating request directory");
 				Directory.CreateDirectory($"{Environment.CurrentDirectory}\\Requests\\{_handler.Request.Id}");
-				_downloadProgress.Value = 50;
+				_current!.ProgressBar.Value = 50;
 
 				switch (_handler.Request.Source.PlatformSource)
 				{
@@ -49,43 +68,68 @@ public class RequestManager
 						break;
 					case PlatformSource.Invalid:
 						Emit("Using default downloader");
-						Emit($"Downloading file from {_handler.Request.Source.Url}");
+						Emit($"Downloading file from {_handler.Request.Source.Url}..");
 						await FileDownloader.DownloadSource(_handler.Request);
 						Emit("Downloaded", "");
-						_downloadProgress.Value = 100;
+						_current!.ProgressBar.Value = 100;
 						await UpdateStatus();
 						break;
 					default:
 						throw new ArgumentOutOfRangeException();
 				}
 
-				_handler.MessageEmitted -= LogToDownload;
-				_handler.MessageEmitted += LogToProcess;
+				Switch(_processing);
 				
-				Emit("Calling processor method");
+				Emit("Calling processor method..");
 				await _handler.Process();
 				Emit("Finished", "");
-				_processingProgress.Value = 100;
+				_current.ProgressBar.Value = 100;
 				await UpdateStatus();
+
+				Switch(_sending);
+				
+				Emit("Checking..");
+				if (new FileInfo(_handler.Request.SourceDirectory() + $"\\result{_handler.Request.Extension()}")
+					    .Length > 8000000)
+				{
+					Emit("File too big!");
+					await _handler.Request.StatusMessage.ModifyAsync("а вот не могу я отправить!! файл большой слишком..", Optional.FromNoValue<DiscordEmbed>());
+					return;
+				}
+
+				var stream = new FileStream(_handler.Request.SourceDirectory() + $"\\result{_handler.Request.Extension()}", FileMode.Open, FileAccess.Read);
+				await _handler.Request.Channel.SendMessageAsync(new DiscordMessageBuilder()
+					.WithFile(Path.GetFileName(_handler.Request.SourceFullPath()), stream)
+					.WithContent(_handler.Request.User.Mention));
+				stream.Close();
+				await _handler.Request.StatusMessage.DeleteAsync();
+				await _handler.RequestMessage.DeleteAsync();
 			}	
 		});
 		Log.Information("Started request processor task");
 	}
 
-	private void LogToDownload(string log)
+	private void Switch(Stage stage)
 	{
-		_downloadLog += log;
-		Task.Run(async () => await UpdateStatus());
+		_handler.MessageEmitted -= _current?.LogAction;
+		_handler.ProgressChanged -= _current?.ProgressAction;
+
+		_current = stage;
+		
+		_handler.MessageEmitted += _current.LogAction;
+		_handler.ProgressChanged += _current.ProgressAction;
 	}
-	private void LogToProcess(string log)
+
+	private int _count;
+	private void Update()
 	{
-		_processingLog += log;
-		Task.Run(async () => await UpdateStatus());
-	}
-	private void LogToSend(string log)
-	{
-		_sendingLog += log;
-		Task.Run(async () => await UpdateStatus());
+		if (_count == 3)
+		{
+			_count = 0;
+			Task.Run(async () => await UpdateStatus());
+		}
+
+		_count++;
 	}
 
 	private void Emit(string str, string end = "\n") => _handler.Emit(str, end);
@@ -98,22 +142,13 @@ public class RequestManager
 			.WithDescription($@"`ID: {_handler.Request.Id}`
 
 **[1] Downloading source**
-```
-{_downloadLog}
-{_downloadProgress}
-```
+{_downloading}
 
 **[2] Processing source**
-```
-{_processingLog}
-{_processingProgress}
-```
+{_processing}
 
 **[3] Sending source**
-```
-{_sendingLog}
-{_sendingProgress}
-```")
+{_sending}")
 			.Build();
 	
 		await _handler.Request.StatusMessage.ModifyAsync("", embed);

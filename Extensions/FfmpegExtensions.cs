@@ -24,10 +24,17 @@ public static class FfmpegExtensions
 		var files = Directory.GetFiles(chunkDirectory).OrderByDescending(x => int.Parse(Path.GetFileNameWithoutExtension(x)));
 		foreach (var file in files)
 		{
-			module.Emit(file);
+			module.Emit(Path.GetFileName(file));
 			await Execute(
-				$"-i {Path.GetFileName(file)} -vf reverse \"{reversedChunkDirectory}\\{Path.GetFileNameWithoutExtension(file)}_reversed{request.Extension()}\"");
+				$"-i \"{Path.GetFileName(file)}\" -vf reverse -af areverse \"{reversedChunkDirectory}\\{Path.GetFileNameWithoutExtension(file)}{request.Extension()}\"",
+				chunkDirectory);
 		}
+
+		var str = Directory.GetFiles(reversedChunkDirectory)
+			.OrderByDescending(x => int.Parse(Path.GetFileNameWithoutExtension(x)))
+			.Aggregate("", (current, file) => current + $"file '{Path.GetFullPath(file)}'");
+		await File.WriteAllTextAsync($"{request.SourceDirectory()}\\Files.txt", str);
+		await Execute($"-f concat -safe 0 -i Files.txt -c copy result{request.Extension()}", request.SourceDirectory());
 	}
 
 	private static async Task Execute(string args, string environment = "")
@@ -37,14 +44,11 @@ public static class FfmpegExtensions
 			FileName = "ffmpeg",
 			Arguments = args,
 			WorkingDirectory = string.IsNullOrEmpty(environment) ? Environment.CurrentDirectory : environment,
-			UseShellExecute = false,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true
+			UseShellExecute = true,
+			WindowStyle = ProcessWindowStyle.Hidden
 		};
 
 		var process = Process.Start(pci)!;
-		process.OutputDataReceived += (_, e) => Log.Information(e.Data);
-		process.BeginOutputReadLine();
 		await process.WaitForExitAsync();
 	}
 }

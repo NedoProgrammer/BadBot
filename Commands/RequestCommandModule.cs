@@ -19,10 +19,12 @@ public abstract class RequestCommandModule: ApplicationCommandModule
 	public abstract Task Process();
 	public abstract Task Execute(InteractionContext ctx, string url = "");
 	public abstract bool Video { get; protected set; }
+	public DiscordMessage RequestMessage { get; private set; }
 
 	public async Task AddToQueue(RequestOptions options, InteractionContext ctx, string url = "")
 	{
 		await ctx.CreateResponseAsync("секунду..");
+		RequestMessage = await ctx.GetOriginalResponseAsync();
 		Request = new Request
 		{
 			Id = Guid.NewGuid().ToString("N"),
@@ -40,8 +42,8 @@ public abstract class RequestCommandModule: ApplicationCommandModule
 		if (string.IsNullOrEmpty(url))
 		{
 			var message = await ctx.EditResponseAsync(new DiscordWebhookBuilder()
-				.WithContent("пытаюсь получить предыдущее сообщение.."));
-			var messages = await ctx.Channel.GetMessagesBeforeAsync(message.Id, 1);
+				.WithContent("пытаюсь получить предыдущие сообщения.."));
+			var messages = await ctx.Channel.GetMessagesBeforeAsync(message.Id, 10);
 
 			var urlRegex =
 				"https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{2,256}\\.[a-z]{2,4}\\b([-a-zA-Z0-9@:%_\\+.~#?&//=]*)";
@@ -49,18 +51,19 @@ public abstract class RequestCommandModule: ApplicationCommandModule
 			if (messages.All(x => x.Attachments.Count == 0 && !Regex.IsMatch(x.Content, urlRegex)))
 			{
 				await ctx.EditResponseAsync(new DiscordWebhookBuilder()
-					.WithContent("не могу я из прошлого сообщения получить видео/картинку! куда дели??"));
+					.WithContent("не могу я из прошлих сообщений получить видео/картинку! куда дели??"));
 				return;
 			}
 
-			if (messages[0].Attachments.Count != 0)
+			var sourceMessage = messages.First(x => x.Attachments.Count != 0 || Regex.IsMatch(x.Content, urlRegex));
+			if (sourceMessage.Attachments.Count != 0)
 			{
-				url = messages[0].Attachments[0].Url;
-				mimeType = messages[0].Attachments[0].MediaType;
+				url = sourceMessage.Attachments[0].Url;
+				mimeType = sourceMessage.Attachments[0].MediaType;
 			}
 			else
 			{
-				url = Regex.Match(messages[0].Content, urlRegex).Value;
+				url = Regex.Match(sourceMessage.Content, urlRegex).Value;
 				mimeType = UrlHelper.GetMimeType(url);
 			}
 		}
