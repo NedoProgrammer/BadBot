@@ -1,5 +1,4 @@
-﻿using BadBot.Commands;
-using BadBot.Extensions;
+﻿using BadBot.Extensions;
 using BadBot.Requests;
 using DSharpPlus.SlashCommands;
 namespace BadBot.Commands.Modify.Video;

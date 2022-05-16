@@ -11,5 +11,5 @@ public static class RequestExtensions
 	public static string SourceDirectory(this Request request) => 
 		$"{Environment.CurrentDirectory}\\Requests\\{request.Id}";
 
-	public static string Extension(this Request request) => UrlHelper.GetExtension(request.Source.Url);
+	public static string Extension(this Request request) => request.Source.Extension ?? UrlHelper.GetExtension(request.Source.Url);
 }

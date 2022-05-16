@@ -14,11 +14,18 @@ public class RequestManager
 	{
 		public Action<string> LogAction;
 		public Action<int> ProgressAction;
-
-		public Stage()
+		public Stage(RequestManager manager)
 		{
-			LogAction = str => Log += str;
-			ProgressAction = i => ProgressBar.Value = i;
+			LogAction = str =>
+			{
+				Log += str;
+				manager.Update();
+			};
+			ProgressAction = i =>
+			{
+				ProgressBar.Value = i;
+				manager.Update();
+			};
 		}
 
 		public string Log { get; private set; }
@@ -35,11 +42,12 @@ public class RequestManager
 	private Queue<RequestCommandModule> _handlers = new();
 	public void AddRequest(RequestCommandModule module) => _handlers.Enqueue(module);
 	
-	private Stage _downloading = new();
-	private Stage _processing = new();
-	private Stage _sending = new();
+	private Stage _downloading;
+	private Stage _processing;
+	private Stage _sending;
 	private RequestCommandModule _handler;
 	private Stage? _current;
+
 	public void StartProcessor()
 	{
 		Task.Run(async () =>
@@ -48,62 +56,90 @@ public class RequestManager
 			{
 				while (_handlers.Count == 0) await Task.Delay(1000);
 				_handler = _handlers.Dequeue();
-				var request = _handler;
+				var request = _handler.Request;
 
-				_downloading = new();
-				_processing = new();
-				_sending = new();
+				if (Directory.GetDirectories("Requests").Length >= 5)
+				{
+					await _handler.RequestMessage.ModifyAsync(m => m.Content = "`warning: delaying request due to cache cleanup`", true);
+					/*GC.Collect();
+					GC.WaitForPendingFinalizers();*/
+					foreach(var directory in Directory.GetDirectories("Requests"))
+						Directory.Delete(directory, true);
+				}
+
+				_downloading = new(this);
+				_processing = new(this);
+				_sending = new(this);
 				_current = null;
 
-				Switch(_downloading);
-
-				Emit("Creating request directory");
-				Directory.CreateDirectory($"{Environment.CurrentDirectory}\\Requests\\{_handler.Request.Id}");
-				_current!.ProgressBar.Value = 50;
-
-				switch (_handler.Request.Source.PlatformSource)
+				try
 				{
-					case PlatformSource.Youtube:
+					Switch(_downloading);
+
+					Emit("Creating request directory");
+					Directory.CreateDirectory($"{Environment.CurrentDirectory}\\Requests\\{request.Id}");
+					_current!.ProgressBar.Value = 50;
+
+					if (request.Source.PlatformSource == PlatformSource.Youtube && _handler.Video)
+					{
 						Emit("Using Youtube downloader");
-						break;
-					case PlatformSource.Invalid:
+						Emit($"Downloading video from {request.Source.Url}..");
+						await FileDownloader.DownloadYoutube(request);
+					}
+					else
+					{
 						Emit("Using default downloader");
-						Emit($"Downloading file from {_handler.Request.Source.Url}..");
-						await FileDownloader.DownloadSource(_handler.Request);
-						Emit("Downloaded", "");
-						_current!.ProgressBar.Value = 100;
-						await UpdateStatus();
-						break;
-					default:
-						throw new ArgumentOutOfRangeException();
+						Emit($"Downloading file from {request.Source.Url}..");
+						await FileDownloader.DownloadSource(request);
+					}
+
+					Emit("Downloaded", "");
+					_current!.ProgressBar.Value = 100;
+
+					Switch(_processing);
+
+					Emit("Calling processor method..");
+					await _handler.Process();
+					Emit("Finished", "");
+					_current.ProgressBar.Value = 100;
+					await UpdateStatus();
+
+					Switch(_sending);
+
+					Emit("Checking..");
+					var resultFile = request.SourceDirectory() + $"\\result{request.Extension()}";
+					if (!File.Exists(resultFile))
+					{
+						Emit("Result file does not exist!");
+						await request.StatusMessage.ModifyAsync(m => m.Content = "а где..", true);
+					}
+					else if (new FileInfo(resultFile).Length > 8000000)
+					{
+						Emit("File too big!");
+						await request.StatusMessage.ModifyAsync(
+							m => m.Content = "а вот не могу я отправить!! файл большой слишкой..", true);
+					}
+					else
+					{
+						var stream = new FileStream(request.SourceDirectory() + $"\\result{request.Extension()}",
+							FileMode.Open, FileAccess.Read);
+						await request.Channel.SendMessageAsync(new DiscordMessageBuilder()
+							.WithFile($"{request.Id}{request.Extension()}", stream)
+							.WithContent(request.User.Mention)
+							.WithAllowedMention(new UserMention(request.User)));
+						stream.Close();
+					}
 				}
-
-				Switch(_processing);
-				
-				Emit("Calling processor method..");
-				await _handler.Process();
-				Emit("Finished", "");
-				_current.ProgressBar.Value = 100;
-				await UpdateStatus();
-
-				Switch(_sending);
-				
-				Emit("Checking..");
-				if (new FileInfo(_handler.Request.SourceDirectory() + $"\\result{_handler.Request.Extension()}")
-					    .Length > 8000000)
+				catch (Exception e)
 				{
-					Emit("File too big!");
-					await _handler.Request.StatusMessage.ModifyAsync("а вот не могу я отправить!! файл большой слишком..", Optional.FromNoValue<DiscordEmbed>());
-					return;
+					await request.StatusMessage.ModifyAsync(x =>
+						x.Content = $"`failed to process source`\n```\n{e}\n{e.StackTrace}\n```");
 				}
 
-				var stream = new FileStream(_handler.Request.SourceDirectory() + $"\\result{_handler.Request.Extension()}", FileMode.Open, FileAccess.Read);
-				await _handler.Request.Channel.SendMessageAsync(new DiscordMessageBuilder()
-					.WithFile(Path.GetFileName(_handler.Request.SourceFullPath()), stream)
-					.WithContent(_handler.Request.User.Mention));
-				stream.Close();
-				await _handler.Request.StatusMessage.DeleteAsync();
+				//await request.StatusMessage.DeleteAsync();
 				await _handler.RequestMessage.DeleteAsync();
+				
+				Log.Debug("Finished request with ID {Id}", request.Id);
 			}	
 		});
 		Log.Information("Started request processor task");

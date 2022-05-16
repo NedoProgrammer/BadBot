@@ -19,7 +19,7 @@ public class Request
 	{
 		Log.Debug("Registering request types");
 		var types = Assembly.GetExecutingAssembly().GetTypes()
-			.Where(x => !string.IsNullOrEmpty(x.Namespace) && x.Namespace.Contains("BadBot.Commands.Modify")).ToList();
+			.Where(x => !string.IsNullOrEmpty(x.Namespace) && x.Namespace.Contains("BadBot.Commands.Modify") && !x.IsNested).ToList();
 		for (var i = 0; i < types.Count; i++)
 			RequestTypes[types[i]] = i;
 		Log.Information("Registered {RequestTypeCount} request types", types.Count); }

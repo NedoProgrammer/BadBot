@@ -16,6 +16,7 @@ public class Source
 {
 	public string MimeType;
 	public string Url;
+	public string? Extension;
 	public UrlSource UrlSource;
 	public PlatformSource PlatformSource = PlatformSource.Invalid;
 }
